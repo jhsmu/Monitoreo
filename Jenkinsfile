@@ -10,13 +10,13 @@ pipeline {
         stage('Preparar entorno') {
             steps {
                 sh 'python3 -m venv venv'
-                sh './venv/bin/pip install pymongo python-dotenv'
+                sh './venv/bin/pip install -r requirements.txt'
             }
         }
 
         stage('Validar conexión MongoDB') {
             steps {
-                sh './venv/bin/python scripts/check_mongo.py'
+                sh './venv/bin/python check_mongo.py'
             }
         }
     }
