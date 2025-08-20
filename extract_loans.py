@@ -27,6 +27,10 @@ query = {
 # Ejecutar consulta
 results = list(loan_col.find(query))
 
+print(f"🔎 Registros encontrados: {len(results)}")
+if results:
+    print("Ejemplo de documento:", results[0])
+
 # 📂 Ruta fija para exportar (montada desde docker-compose)
 EXPORT_DIR = "/exports"
 os.makedirs(EXPORT_DIR, exist_ok=True)  # por si no existe dentro del contenedor
