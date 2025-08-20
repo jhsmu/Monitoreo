@@ -11,8 +11,21 @@ DB_NAME = os.getenv("DATABASE_NAME")
 
 # Conectar a MongoDB Atlas
 client = MongoClient(MONGO_URI)
+try:
+    client.admin.command('ping')
+    print("✅ Conexión exitosa a MongoDB Atlas")
+except Exception as e:
+    print("❌ Error de conexión:", e)
 db = client[DB_NAME]
 loan_col = db["loan"]
+
+print("📊 Total de documentos en loan:", loan_col.count_documents({}))
+doc = loan_col.find_one()
+if doc:
+    print("Ejemplo de documento en loan:", doc)
+else:
+    print("⚠️ La colección está vacía")
+
 
 # Definir query para detectar inconsistencias
 query = {
