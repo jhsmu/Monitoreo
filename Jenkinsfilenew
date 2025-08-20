@@ -1,0 +1,36 @@
+pipeline {
+    agent any
+
+    triggers {
+        cron('H/5 * * * *') // Ejecutar cada 5 minutos
+    }
+
+    environment {
+        MONGO_URI = credentials('MONGO_ATLAS_URI')  // Configura en Jenkins
+        DATABASE_NAME = 'tu_base_de_datos'
+    }
+
+    stages {
+        stage('Preparar entorno') {
+            steps {
+                sh 'python3 -m venv venv'
+                sh './venv/bin/pip install -r requirements.txt'
+            }
+        }
+
+        stage('Ejecutar extracción') {
+            steps {
+                sh './venv/bin/python extract_loans.py'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Reporte generado y guardado en el workspace"
+        }
+        failure {
+            echo "❌ Error en la extracción"
+        }
+    }
+}
