@@ -7,8 +7,8 @@ import time
 
 # Cargar variables de entorno (.env)
 load_dotenv()
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("DATABASE_NAME")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+DB_NAME = os.getenv("DATABASE_NAME", "middleware_test")
 
 print("Mongo URI:", MONGO_URI)
 print(DB_NAME)
