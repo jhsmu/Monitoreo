@@ -11,7 +11,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DATABASE_NAME")
 
 print("Mongo URI:", MONGO_URI)
-ptint(DB_NAME)
+print(DB_NAME)
 # Conectar a MongoDB Atlas
 client = MongoClient(MONGO_URI)
 print("Bases de datos disponibles:", client.list_database_names())
