@@ -18,8 +18,8 @@ pipeline {
         stage('Ejecutar extracción') {
             steps {
                 withCredentials([
-                    string(credentialsId: 'STOP_ID', variable: 'STOP_ID'),
-                    string(credentialsId: 'YOYO_ID', variable: 'YOYO_ID')
+                    string(credentialsId: 'f757540a-dec3-4e01-97a2-6e4fa31bb80d', variable: 'STOP_ID'),
+                    string(credentialsId: '2664262e-f2a2-4b8e-94d6-93a6afb1a25b', variable: 'YOYO_ID')
                 ]) {
                     // Ejecutar script pasando variables de entorno
                     sh './venv/bin/python consistency-check.py'
