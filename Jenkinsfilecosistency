@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+
+    environment {
+        MONGODB_URI = credentials('b2eada42-2521-45e0-8f40-072912c52410')      // Configura tu credencial para la URI de MongoDB
+        DATABASE_NAME = 'middleware'           // Nombre de la base de datos
+    }
+
+    stages {
+        stage('Preparar entorno') {
+            steps {
+                // Crear virtualenv y dependencias
+                sh 'python3 -m venv venv'
+                sh './venv/bin/pip install -r requirementstask.txt'
+            }
+        }
+
+        stage('Ejecutar extracción') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'STOP_ID', variable: 'STOP_ID'),
+                    string(credentialsId: 'YOYO_ID', variable: 'YOYO_ID')
+                ]) {
+                    // Ejecutar script pasando variables de entorno
+                    sh './venv/bin/python consistency-check.py'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Script ejecutado correctamente"
+        }
+        failure {
+            echo "❌ Error al ejecutar el script"
+        }
+    }
+}
