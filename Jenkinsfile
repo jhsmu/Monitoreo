@@ -1,5 +1,9 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'python:3.11-slim'
+        }
+    }
 
     environment {
         MONGO_URI = credentials('b2eada42-2521-45e0-8f40-072912c52410') 
@@ -7,16 +11,15 @@ pipeline {
     }
 
     stages {
-        stage('Preparar entorno') {
+        stage('Instalar dependencias') {
             steps {
-                sh 'python3 -m venv venv'
-                sh './venv/bin/pip install -r requirements.txt'
+                sh 'pip install -r requirements.txt'
             }
         }
 
         stage('Validar conexión MongoDB') {
             steps {
-                sh './venv/bin/python check_mongo.py'
+                sh 'python check_mongo.py'
             }
         }
     }
