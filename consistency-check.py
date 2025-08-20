@@ -14,7 +14,7 @@ COLLECTION_NAME = 'loan'
 STOP_ID = os.getenv('STOP_ID')
 YOYO_ID = os.getenv('YOYO_ID')
 
-if not STOP_ID or not YOYO_ID: 
+if not STOP_ID or not YOYO_ID:
     raise Exception("Configura los IDs en las variables de entorno")
 
 # Directorio y archivo de backup
@@ -74,11 +74,94 @@ def save_to_json(data, filename):
         log(f"❌ Error al guardar el archivo JSON: {e}")
         return False
 
-# Resto de funciones (update_amortization_arrears, validate_user_status)
-# Se agregan logs de la misma forma: log("mensaje...")
+def update_amortization_arrears(db, loan_documents):
+    log(f"🔄 Actualizando amortization para {len(loan_documents)} préstamos...")
+    loan_collection = db.loan
+    updated_loans = []
+
+    for i, loan_doc in enumerate(loan_documents, 1):
+        loan_id = loan_doc.get("_id")
+        log(f"🔍 Procesando préstamo {i}: ID={loan_id}")
+
+        amortization = loan_doc.get("amortization", [])
+        if not amortization:
+            log(f"⚠️ Préstamo {i}: No tiene amortization")
+            continue
+
+        arrear_elements = []
+        update_array = []
+
+        for j, element in enumerate(amortization):
+            days_in_arrear = int(element.get("days_in_arrear", 0))
+            if days_in_arrear > 0:
+                arrear_elements.append({"index": j, "days_in_arrear": days_in_arrear})
+                updated_element = element.copy()
+                updated_element["days_in_arrear"] = 0
+                update_array.append(updated_element)
+            else:
+                update_array.append(element)
+
+            # Validación de tipos
+            type_check = all([isinstance(element.get(key, 0), int) for key in int_keys])
+            if not type_check:
+                log(f"⚠️ Crédito {loan_id} tiene campos flotantes en amortization {element.get('id')}")
+
+        if not arrear_elements:
+            log(f"ℹ️ Préstamo {i}: No tiene elementos con days_in_arrear > 0")
+            continue
+
+        # Actualizar en MongoDB
+        try:
+            result = loan_collection.update_one({"_id": loan_id}, {"$set": {"amortization": update_array}})
+            if result.modified_count > 0:
+                log(f"✅ Préstamo {i}: Actualizados {len(arrear_elements)} elementos")
+                updated_loans.append({"loan_id": str(loan_id), "elements_updated": len(arrear_elements)})
+            else:
+                log(f"⚠️ Préstamo {i}: No se pudo actualizar")
+        except Exception as e:
+            log(f"❌ Error al actualizar préstamo {i}: {e}")
+
+    log(f"📊 Total préstamos actualizados: {len(updated_loans)}")
+    return updated_loans
+
+def validate_user_status(db, loan_documents):
+    log(f"🔍 Validando status de {len(loan_documents)} usuarios...")
+    user_collection = db.user
+    loan_collection = db.loan
+    validation_results = []
+    updated_users = []
+
+    unique_user_ids = set(loan_doc.get("user_id") for loan_doc in loan_documents if loan_doc.get("user_id"))
+    log(f"📊 Procesando {len(unique_user_ids)} usuarios únicos...")
+
+    for user_id in unique_user_ids:
+        user_doc = user_collection.find_one({"_id": user_id})
+        if not user_doc:
+            log(f"❌ Usuario ID={user_id} no encontrado")
+            validation_results.append({"user_id": str(user_id), "user_found": False})
+            continue
+
+        user_status = user_doc.get("status", "No especificado")
+        if user_status == "arrear":
+            user_loans = list(loan_collection.find({"user_id": user_id}))
+            arrear_loans = [loan for loan in user_loans if loan.get("status") == "arrear"]
+            should_update = len(user_loans) == 1 or len(arrear_loans) == 0
+            if should_update:
+                try:
+                    result = user_collection.update_one({"_id": user_id}, {"$set": {"status": "active"}})
+                    if result.modified_count > 0:
+                        log(f"🔄 Usuario {user_id} actualizado a active")
+                        updated_users.append({"user_id": str(user_id), "old_status": "arrear", "new_status": "active"})
+                except Exception as e:
+                    log(f"❌ Error actualizando usuario {user_id}: {e}")
+
+        validation_results.append({"user_id": str(user_id), "user_status": user_status, "user_found": True})
+
+    log(f"📊 Total usuarios actualizados: {len(updated_users)}")
+    return validation_results, updated_users
 
 def main():
-    log("🚀 Iniciando script de consulta MongoDB Atlas")
+    log("🚀 Iniciando script")
     client = connect_to_mongodb(MONGODB_URI)
     if not client:
         return
@@ -87,39 +170,25 @@ def main():
         db = client[DATABASE_NAME]
         log(f"📂 Conectado a la base de datos: {DATABASE_NAME}")
 
-        # Paso 1
         loan_documents = get_loan_documents(db)
         if not loan_documents:
-            log("⚠️ No se encontraron documentos que cumplan los criterios")
+            log("⚠️ No se encontraron documentos")
             return
 
-        # Paso 2: Guardar JSON
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{output_dir}/loan_documents_{timestamp}.json"
-        save_to_json(loan_documents, filename)
+        save_to_json(loan_documents, f"{output_dir}/loan_documents_{timestamp}.json")
 
-        # Paso 3: Actualizar amortization
-        log("📋 Actualizando amortization...")
         amortization_updates = update_amortization_arrears(db, loan_documents)
-
-        # Paso 4: Validar status de usuarios
-        log("📋 Validando status de usuarios...")
         validation_results, updated_users = validate_user_status(db, loan_documents)
 
-        # Guardar resultados
-        validation_filename = f"{output_dir}/user_validation_{timestamp}.json"
-        save_to_json(validation_results, validation_filename)
-
+        save_to_json(validation_results, f"{output_dir}/user_validation_{timestamp}.json")
         if updated_users:
-            user_updates_filename = f"{output_dir}/user_updates_{timestamp}.json"
-            save_to_json(updated_users, user_updates_filename)
-
+            save_to_json(updated_users, f"{output_dir}/user_updates_{timestamp}.json")
         if amortization_updates:
-            amortization_updates_filename = f"{output_dir}/amortization_updates_{timestamp}.json"
-            save_to_json(amortization_updates, amortization_updates_filename)
+            save_to_json(amortization_updates, f"{output_dir}/amortization_updates_{timestamp}.json")
 
-        log(f"📊 RESUMEN FINAL: documentos={len(loan_documents)}, "
-            f"amortization_actualizada={len(amortization_updates)}, "
+        log(f"📊 RESUMEN FINAL: loans={len(loan_documents)}, "
+            f"amortization_updates={len(amortization_updates)}, "
             f"usuarios_validados={len(validation_results)}, usuarios_actualizados={len(updated_users)}")
 
     except Exception as e:
