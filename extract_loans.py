@@ -10,56 +10,52 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DATABASE_NAME")
 
-# Conectar a MongoDB
+# Conectar a MongoDB Atlas
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 loan_col = db["loan"]
 
 # Definir métricas
 creditos_totales = Gauge('creditos_totales', 'Total de créditos en la colección loan')
-creditos_condiciones = Gauge('creditos_condiciones', 'Créditos que cumplen query de mora/pagos (prueba con 20 docs)')
+creditos_inconsistentes = Gauge('creditos_inconsistentes', 'Créditos que cumplen query de mora/pagos')
 
-# Función para validar condiciones
-def cumple_condiciones(doc):
-    # Caso 1: status
-    if doc.get("status") == "arrear":
-        return True
-    
-    # Caso 2: payment_amount
-    if doc.get("payment_amount", 0) == 0:
-        return True
+# Definir query para inconsistencias
+query = {
+    "$or": [
+        {"status": "arrear"},
+        {"payment_amount": 0},
+        {"amortization.total_amount": 0},
+        {"amortization.pending_payment": {"$gt": 0}}
+    ]
+}
 
-    # Caso 3: amortization puede ser dict o list
-    amort = doc.get("amortization", {})
-    if isinstance(amort, dict):
-        if amort.get("total_amount", 0) == 0 or amort.get("pending_payment", 0) > 0:
-            return True
-    elif isinstance(amort, list):
-        for a in amort:
-            if a.get("total_amount", 0) == 0 or a.get("pending_payment", 0) > 0:
-                return True
-
-    return False
-
-# Función para calcular métricas
 def calcular_metricas():
+    # Solo extraer los primeros 20 documentos para prueba
+    sample_docs = loan_col.find(query).limit(20)
+    
     total = loan_col.count_documents({})
-
-    # Tomar solo 20 documentos para prueba
-    sample_docs = loan_col.find({}, {"status": 1, "payment_amount": 1, "amortization": 1}).limit(20)
-    en_condiciones = sum(1 for doc in sample_docs if cumple_condiciones(doc))
-
-    # Actualizar métricas
+    inconsistentes = loan_col.count_documents(query)
+    
     creditos_totales.set(total)
-    creditos_condiciones.set(en_condiciones)
-
-    print(f"[{datetime.now()}] Métricas → total={total}, en_condiciones(20 docs)={en_condiciones}")
+    creditos_inconsistentes.set(inconsistentes)
+    
+    print(f"[{datetime.now()}] Métricas → total={total}, inconsistentes={inconsistentes}")
+    print("Ejemplo de documentos (máx 20):")
+    for doc in sample_docs:
+        print({
+            "_id": str(doc.get("_id")),
+            "user_id": doc.get("user_id"),
+            "status": doc.get("status"),
+            "payment_amount": doc.get("payment_amount"),
+            "total_amount": sum(a.get("total_amount", 0) for a in doc.get("amortization", [])),
+            "pending_payment": sum(a.get("pending_payment", 0) for a in doc.get("amortization", []))
+        })
 
 if __name__ == "__main__":
-    # Levantar servidor en :8000/metrics
-    start_http_server(8000, addr='0.0.0.0')
-    print("Servidor de métricas expuesto en http://localhost:8000/metrics")
-
+    # Servidor Prometheus en puerto 8000
+    start_http_server(8000)
+    print("Servidor de métricas disponible en http://localhost:8000/metrics")
+    
     while True:
         calcular_metricas()
-        time.sleep(60)  # cada 60s
+        time.sleep(300)  # cada 5 minutos
