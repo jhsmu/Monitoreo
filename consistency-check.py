@@ -9,7 +9,7 @@ import time
 
 load_dotenv()
 
-# Configuración
+# --- Configuración ---
 MONGODB_URI = os.getenv('MONGODB_URI')
 DATABASE_NAME = os.getenv('DATABASE_NAME')
 COLLECTION_NAME = 'loan'
@@ -20,7 +20,6 @@ YOYO_ID = os.getenv('YOYO_ID')
 if not STOP_ID or not YOYO_ID:
     raise Exception("Configura los IDs en las variables de entorno")
 
-# Directorio y archivo de backup
 output_dir = "backups"
 os.makedirs(output_dir, exist_ok=True)
 
@@ -36,25 +35,26 @@ int_keys = [
     "pending_arrear_interest_taxes_amount",
 ]
 
-# Métricas para Prometheus
+# --- Métricas Prometheus ---
 loans_total = Gauge('loans_total', 'Total number of loans processed')
-users_updated = Gauge('users_updated', 'Number of users updated')
 amortization_updated = Gauge('amortization_updated', 'Number of loans with amortization updated')
+users_updated = Gauge('users_updated', 'Number of users updated')
 
+# --- Funciones de logging ---
 def log(msg):
-    """Función simple para imprimir con timestamp"""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
 
+# --- Servidor Prometheus en hilo separado ---
 def start_metrics_server(port=8000):
-    """Arranca servidor para Prometheus en un hilo separado"""
     def run_server():
-        log(f"🌐 Iniciando servidor de métricas Prometheus en puerto {port}")
+        log(f"🌐 Servidor Prometheus corriendo en puerto {port}")
         start_http_server(port)
         while True:
             time.sleep(1)  # Mantener hilo vivo
     t = threading.Thread(target=run_server, daemon=True)
     t.start()
 
+# --- MongoDB ---
 def connect_to_mongodb(uri):
     log("🔗 Intentando conexión a MongoDB...")
     try:
@@ -67,7 +67,7 @@ def connect_to_mongodb(uri):
         return None
 
 def get_loan_documents(db):
-    log("📋 Ejecutando consulta a la colección loan...")
+    log("📋 Consultando colección loan...")
     try:
         query = {
             "financial_entity_id": {"$in": [STOP_ID, YOYO_ID]},
@@ -80,7 +80,7 @@ def get_loan_documents(db):
         loans_total.set(len(results))
         return results
     except Exception as e:
-        log(f"❌ Error al consultar la colección loan: {e}")
+        log(f"❌ Error consultando loan: {e}")
         loans_total.set(0)
         return []
 
@@ -91,7 +91,7 @@ def save_to_json(data, filename):
         log(f"📄 Archivo JSON guardado: {filename}")
         return True
     except Exception as e:
-        log(f"❌ Error al guardar el archivo JSON: {e}")
+        log(f"❌ Error guardando JSON: {e}")
         return False
 
 def update_amortization_arrears(db, loan_documents):
@@ -121,16 +121,14 @@ def update_amortization_arrears(db, loan_documents):
             else:
                 update_array.append(element)
 
-            # Validación de tipos
             type_check = all([isinstance(element.get(key, 0), int) for key in int_keys])
             if not type_check:
                 log(f"⚠️ Crédito {loan_id} tiene campos flotantes en amortization {element.get('id')}")
 
         if not arrear_elements:
-            log(f"ℹ️ Préstamo {i}: No tiene elementos con days_in_arrear > 0")
+            log(f"ℹ️ Préstamo {i}: No hay elementos con days_in_arrear > 0")
             continue
 
-        # Actualizar en MongoDB
         try:
             result = loan_collection.update_one({"_id": loan_id}, {"$set": {"amortization": update_array}})
             if result.modified_count > 0:
@@ -139,7 +137,7 @@ def update_amortization_arrears(db, loan_documents):
             else:
                 log(f"⚠️ Préstamo {i}: No se pudo actualizar")
         except Exception as e:
-            log(f"❌ Error al actualizar préstamo {i}: {e}")
+            log(f"❌ Error actualizando préstamo {i}: {e}")
 
     amortization_updated.set(len(updated_loans))
     log(f"📊 Total préstamos actualizados: {len(updated_loans)}")
@@ -182,10 +180,11 @@ def validate_user_status(db, loan_documents):
     log(f"📊 Total usuarios actualizados: {len(updated_users)}")
     return validation_results, updated_users
 
+# --- Función principal ---
 def main():
     log("🚀 Iniciando script")
 
-    # Arrancar servidor Prometheus en segundo plano
+    # Arrancar servidor Prometheus
     start_metrics_server(8000)
 
     client = connect_to_mongodb(MONGODB_URI)
