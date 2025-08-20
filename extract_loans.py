@@ -27,8 +27,15 @@ query = {
 # Ejecutar consulta
 results = list(loan_col.find(query))
 
-# Exportar a CSV
-filename = f"report_loans_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+# 📂 Ruta fija para exportar (montada desde docker-compose)
+EXPORT_DIR = "/exports"
+os.makedirs(EXPORT_DIR, exist_ok=True)  # por si no existe dentro del contenedor
+
+filename = os.path.join(
+    EXPORT_DIR,
+    f"report_loans_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+)
+
 with open(filename, mode="w", newline="", encoding="utf-8") as file:
     writer = csv.writer(file)
     
@@ -49,4 +56,4 @@ with open(filename, mode="w", newline="", encoding="utf-8") as file:
             doc.get("amortization", {}).get("pending_payment")
         ])
 
-print(f"✅ Reporte generado: {filename}")
+print(f"✅ Reporte generado en: {filename}")
