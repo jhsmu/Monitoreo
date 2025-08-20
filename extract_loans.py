@@ -57,7 +57,7 @@ def calcular_metricas():
 
 if __name__ == "__main__":
     # Levantar servidor en :8000/metrics
-    start_http_server(8000)
+    start_http_server(8000, addr='0.0.0.0')
     print("Servidor de métricas expuesto en http://localhost:8000/metrics")
 
     while True:
