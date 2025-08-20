@@ -10,13 +10,23 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DATABASE_NAME")
 
 # Conectar a MongoDB Atlas
+# Conectar a MongoDB Atlas
 client = MongoClient(MONGO_URI)
 try:
     client.admin.command('ping')
     print("✅ Conexión exitosa a MongoDB Atlas")
 except Exception as e:
     print("❌ Error de conexión:", e)
+
+# Listar bases de datos
+print("📂 Bases de datos disponibles:", client.list_database_names())
+
+# Seleccionar la base que definiste en el .env
 db = client[DB_NAME]
+
+# Listar colecciones dentro de esa base
+print(f"📑 Colecciones en {DB_NAME}:", db.list_collection_names())
+
 loan_col = db["loan"]
 
 print("📊 Total de documentos en loan:", loan_col.count_documents({}))
