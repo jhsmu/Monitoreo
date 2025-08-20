@@ -3,6 +3,9 @@ import json
 from pymongo import MongoClient
 from datetime import datetime
 from dotenv import load_dotenv
+from prometheus_client import start_http_server, Gauge
+import threading
+import time
 
 load_dotenv()
 
@@ -33,9 +36,24 @@ int_keys = [
     "pending_arrear_interest_taxes_amount",
 ]
 
+# Métricas para Prometheus
+loans_total = Gauge('loans_total', 'Total number of loans processed')
+users_updated = Gauge('users_updated', 'Number of users updated')
+amortization_updated = Gauge('amortization_updated', 'Number of loans with amortization updated')
+
 def log(msg):
     """Función simple para imprimir con timestamp"""
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
+def start_metrics_server(port=8000):
+    """Arranca servidor para Prometheus en un hilo separado"""
+    def run_server():
+        log(f"🌐 Iniciando servidor de métricas Prometheus en puerto {port}")
+        start_http_server(port)
+        while True:
+            time.sleep(1)  # Mantener hilo vivo
+    t = threading.Thread(target=run_server, daemon=True)
+    t.start()
 
 def connect_to_mongodb(uri):
     log("🔗 Intentando conexión a MongoDB...")
@@ -59,9 +77,11 @@ def get_loan_documents(db):
         loan_collection = db.loan
         results = list(loan_collection.find(query))
         log(f"📊 Documentos obtenidos: {len(results)}")
+        loans_total.set(len(results))
         return results
     except Exception as e:
         log(f"❌ Error al consultar la colección loan: {e}")
+        loans_total.set(0)
         return []
 
 def save_to_json(data, filename):
@@ -121,6 +141,7 @@ def update_amortization_arrears(db, loan_documents):
         except Exception as e:
             log(f"❌ Error al actualizar préstamo {i}: {e}")
 
+    amortization_updated.set(len(updated_loans))
     log(f"📊 Total préstamos actualizados: {len(updated_loans)}")
     return updated_loans
 
@@ -157,11 +178,16 @@ def validate_user_status(db, loan_documents):
 
         validation_results.append({"user_id": str(user_id), "user_status": user_status, "user_found": True})
 
+    users_updated.set(len(updated_users))
     log(f"📊 Total usuarios actualizados: {len(updated_users)}")
     return validation_results, updated_users
 
 def main():
     log("🚀 Iniciando script")
+
+    # Arrancar servidor Prometheus en segundo plano
+    start_metrics_server(8000)
+
     client = connect_to_mongodb(MONGODB_URI)
     if not client:
         return
