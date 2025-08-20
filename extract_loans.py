@@ -1,43 +1,25 @@
 import os
-import csv
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from datetime import datetime
+from prometheus_client import start_http_server, Gauge
+import time
 
 # Cargar variables de entorno (.env)
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DATABASE_NAME")
 
-# Conectar a MongoDB Atlas
-# Conectar a MongoDB Atlas
+# Conectar a MongoDB
 client = MongoClient(MONGO_URI)
-try:
-    client.admin.command('ping')
-    print("✅ Conexión exitosa a MongoDB Atlas")
-except Exception as e:
-    print("❌ Error de conexión:", e)
-
-# Listar bases de datos
-print("📂 Bases de datos disponibles:", client.list_database_names())
-
-# Seleccionar la base que definiste en el .env
 db = client[DB_NAME]
-
-# Listar colecciones dentro de esa base
-print(f"📑 Colecciones en {DB_NAME}:", db.list_collection_names())
-
 loan_col = db["loan"]
 
-print("📊 Total de documentos en loan:", loan_col.count_documents({}))
-doc = loan_col.find_one()
-if doc:
-    print("Ejemplo de documento en loan:", doc)
-else:
-    print("⚠️ La colección está vacía")
+# Definir métricas
+creditos_totales = Gauge('creditos_totales', 'Total de créditos en la colección loan')
+creditos_condiciones = Gauge('creditos_condiciones', 'Créditos que cumplen query de mora/pagos')
 
-
-# Definir query para detectar inconsistencias
+# Definir query
 query = {
     "$or": [
         {"status": "arrear"},
@@ -47,40 +29,21 @@ query = {
     ]
 }
 
-# Ejecutar consulta
-results = list(loan_col.find(query))
+def calcular_metricas():
+    total = loan_col.count_documents({})
+    en_condiciones = loan_col.count_documents(query)
 
-print(f"🔎 Registros encontrados: {len(results)}")
-if results:
-    print("Ejemplo de documento:", results[0])
+    # Actualizar métricas
+    creditos_totales.set(total)
+    creditos_condiciones.set(en_condiciones)
 
-# 📂 Ruta fija para exportar (montada desde docker-compose)
-EXPORT_DIR = "/exports"
-os.makedirs(EXPORT_DIR, exist_ok=True)  # por si no existe dentro del contenedor
+    print(f"[{datetime.now()}] Métricas → total={total}, en_condiciones={en_condiciones}")
 
-filename = os.path.join(
-    EXPORT_DIR,
-    f"report_loans_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-)
+if __name__ == "__main__":
+    # Levantar servidor en :8000/metrics
+    start_http_server(8000)
+    print("Servidor de métricas expuesto en http://localhost:8000/metrics")
 
-with open(filename, mode="w", newline="", encoding="utf-8") as file:
-    writer = csv.writer(file)
-    
-    # Escribir encabezados
-    writer.writerow([
-        "loan_id", "user_id", "status", 
-        "payment_amount", "total_amount", "pending_payment"
-    ])
-    
-    # Escribir datos
-    for doc in results:
-        writer.writerow([
-            str(doc.get("_id")),
-            doc.get("user_id"),
-            doc.get("status"),
-            doc.get("payment_amount"),
-            doc.get("amortization", {}).get("total_amount"),
-            doc.get("amortization", {}).get("pending_payment")
-        ])
-
-print(f"✅ Reporte generado en: {filename}")
+    while True:
+        calcular_metricas()
+        time.sleep(60)  # cada 60s
