@@ -6,8 +6,8 @@ pipeline {
     }
 
     environment {
-        MONGO_URI = credentials('MONGO_ATLAS_URI')  // Configura en Jenkins
-        DATABASE_NAME = 'tu_base_de_datos'
+        MONGO_URI = credentials('b2eada42-2521-45e0-8f40-072912c52410')  // Configura en Jenkins
+        DATABASE_NAME = 'middelware'
     }
 
     stages {
