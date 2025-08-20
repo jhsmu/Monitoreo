@@ -3,7 +3,7 @@ pipeline {
 
 
     environment {
-        MONGO_URI = credentials('bff27ffd-59e3-4b70-9532-4e785c85cc79')  // Configura en Jenkins
+        MONGO_URI = credentials('mongodb://localhost:27017/')  // Configura en Jenkins
         DATABASE_NAME = 'middleware_test'
     }
 
